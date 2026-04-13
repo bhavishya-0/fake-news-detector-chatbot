@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TruthLens — AI Fake News Detector</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- AUTH OVERLAY -->
+<div id="authOverlay" class="auth-overlay active">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="logo-icon">🔍</span>
+      <span class="logo-text">TruthLens</span>
+    </div>
+    <p class="auth-tagline">AI-powered fake news detection</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" onclick="switchTab('login')">Login</button>
+      <button class="auth-tab" onclick="switchTab('register')">Register</button>
+    </div>
+
+    <!-- Login Form -->
+    <div id="loginForm" class="auth-form active">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="••••••••" />
+      </div>
+      <div id="loginError" class="auth-error"></div>
+      <button class="auth-btn" onclick="handleLogin()">
+        <span class="btn-text">Login</span>
+        <span class="btn-loader hidden">⟳</span>
+      </button>
+      <p class="auth-alt">No account? <a onclick="switchTab('register')">Register here</a></p>
+    </div>
+
+    <!-- Register Form -->
+    <div id="registerForm" class="auth-form">
+      <div class="form-group">
+        <label>Username</label>
+        <input type="text" id="regUsername" placeholder="cooluser123" />
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="you@example.com" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input type="password" id="regPassword" placeholder="Min 6 characters" />
+      </div>
+      <div id="registerError" class="auth-error"></div>
+      <button class="auth-btn" onclick="handleRegister()">
+        <span class="btn-text">Create Account</span>
+        <span class="btn-loader hidden">⟳</span>
+      </button>
+      <p class="auth-alt">Have account? <a onclick="switchTab('login')">Login here</a></p>
+    </div>
+
+    <div class="skip-auth">
+      <button onclick="skipAuth()">Continue as Guest →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="mainApp" class="app hidden">
+
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="app-logo">
+        <span>🔍</span>
+        <span class="logo-name">TruthLens</span>
+      </div>
+      <button class="sidebar-close" onclick="toggleSidebar()">✕</button>
+    </div>
+    <nav class="sidebar-nav">
+      <button class="nav-item active" onclick="showSection('chat',event)"><span>💬</span> Chat Detector</button>
+      <button class="nav-item" onclick="showSection('tips',event)"><span>📚</span> Media Literacy</button>
+      <button class="nav-item" onclick="showSection('history',event)" id="historyNavBtn"><span>🕑</span> History</button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="user-badge">
+        <span class="user-avatar" id="userAvatar">G</span>
+        <div class="user-info">
+          <span class="user-name" id="userDisplayName">Guest</span>
+          <span class="user-role">User</span>
+        </div>
+      </div>
+      <button class="logout-btn" id="logoutBtn" onclick="handleLogout()">⏻ Logout</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+      <h1 class="page-title" id="pageTitle">Fake News Detector</h1>
+      <div class="topbar-actions">
+        <button class="theme-toggle" onclick="toggleTheme()"><span id="themeIcon">☀️</span></button>
+        <button class="clear-btn" onclick="clearChat()">🗑 Clear</button>
+      </div>
+    </header>
+
+    <!-- CHAT SECTION -->
+    <section id="chatSection" class="section active">
+      <div class="example-pills" id="examplePills">
+        <p class="examples-label">Try these examples:</p>
+        <div class="pills-row">
+          <button class="pill" onclick="useExample(this)">SHOCKING: Doctors HATE this one weird cure!</button>
+          <button class="pill" onclick="useExample(this)">WHO confirms vaccine is 94% effective in trials</button>
+          <button class="pill" onclick="useExample(this)">WAKE UP SHEEPLE!! Government hiding alien contact!!!</button>
+          <button class="pill" onclick="useExample(this)">Reuters: Central bank raises interest rates by 0.25%</button>
+          <button class="pill" onclick="useExample(this)">Scientists at MIT discover new battery technology</button>
+          <button class="pill" onclick="useExample(this)">SHARE BEFORE DELETED: They don't want you to know!</button>
+        </div>
+      </div>
+
+      <div class="chat-window" id="chatWindow">
+        <div class="chat-message bot-message intro-msg">
+          <div class="bot-avatar">🔍</div>
+          <div class="message-bubble">
+            <p>Hello! I'm <strong>TruthLens</strong>, your AI-powered fake news detector.</p>
+            <p>Paste any news headline or statement and I'll analyze it instantly.</p>
+            <div class="intro-tags">
+              <span class="tag real">✅ Real News</span>
+              <span class="tag fake">🚨 Fake News</span>
+              <span class="tag uncertain">❓ Uncertain</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea
+            id="newsInput"
+            placeholder="Paste a news headline or statement here..."
+            rows="1"
+            maxlength="2000"
+            onkeydown="handleKeyDown(event)"
+            oninput="autoResize(this)"
+          ></textarea>
+          <div class="input-footer">
+            <span class="char-count" id="charCount">0 / 2000</span>
+            <button class="send-btn" onclick="analyzeNews()" id="sendBtn">
+              Check News →
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TIPS SECTION -->
+    <section id="tipsSection" class="section">
+      <div class="tips-container">
+        <div class="tips-hero">
+          <h2>📚 How to Identify Fake News</h2>
+          <p>Become a smarter news consumer with these essential media literacy tips.</p>
+        </div>
+        <div class="tips-grid">
+          <div class="tip-card"><div class="tip-number">01</div><div class="tip-icon">🔗</div><h3>Check the Source</h3><p>Always verify who published the story. Fake sites often mimic real ones.</p><div class="tip-action">🎯 Look for the "About Us" page and contact info</div></div>
+          <div class="tip-card"><div class="tip-number">02</div><div class="tip-icon">📅</div><h3>Check the Date</h3><p>Old news gets recycled as current events. Always check the publication date.</p><div class="tip-action">🎯 Look for publication and updated timestamps</div></div>
+          <div class="tip-card"><div class="tip-number">03</div><div class="tip-icon">📖</div><h3>Read Beyond Headline</h3><p>Headlines grab attention. The full article may tell a very different story.</p><div class="tip-action">🎯 Does the article actually support its headline?</div></div>
+          <div class="tip-card"><div class="tip-number">04</div><div class="tip-icon">🔎</div><h3>Check Other Sources</h3><p>Real news is covered by multiple credible outlets. One unknown site? Be skeptical.</p><div class="tip-action">🎯 Cross-check: Reuters, BBC, AP News</div></div>
+          <div class="tip-card"><div class="tip-number">05</div><div class="tip-icon">🧪</div><h3>Look for Evidence</h3><p>Real journalism cites experts, studies, and statistics. No evidence = red flag.</p><div class="tip-action">🎯 Ask: Who said this? What is the proof?</div></div>
+          <div class="tip-card"><div class="tip-number">06</div><div class="tip-icon">😤</div><h3>Check Your Emotions</h3><p>If a story makes you very angry or scared, be extra careful. That is the goal of fake news.</p><div class="tip-action">🎯 Pause and think before sharing</div></div>
+          <div class="tip-card"><div class="tip-number">07</div><div class="tip-icon">🎭</div><h3>Identify Satire</h3><p>Some sites publish satire that gets shared as real news. Always check the site type.</p><div class="tip-action">🎯 Is this a parody or satire website?</div></div>
+          <div class="tip-card"><div class="tip-number">08</div><div class="tip-icon">🖼️</div><h3>Check Images</h3><p>Images are often taken out of context. Use reverse image search to verify them.</p><div class="tip-action">🎯 Right-click → Search image with Google</div></div>
+        </div>
+        <div class="fact-check-sites">
+          <h3>🌐 Trusted Fact-Checking Websites</h3>
+          <div class="sites-grid">
+            <a href="https://www.snopes.com" target="_blank" class="site-card"><strong>Snopes.com</strong><span>Debunks myths and rumors</span></a>
+            <a href="https://www.factcheck.org" target="_blank" class="site-card"><strong>FactCheck.org</strong><span>Non-partisan fact-checking</span></a>
+            <a href="https://www.politifact.com" target="_blank" class="site-card"><strong>PolitiFact</strong><span>Pulitzer Prize fact-checker</span></a>
+            <a href="https://apnews.com/hub/ap-fact-check" target="_blank" class="site-card"><strong>AP Fact Check</strong><span>Associated Press verification</span></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORY SECTION -->
+    <section id="historySection" class="section">
+      <div class="history-container">
+        <div class="history-header">
+          <h2>🕑 Detection History</h2>
+          <button class="danger-btn" onclick="clearHistory()">Clear All</button>
+        </div>
+        <div id="historyList" class="history-list">
+          <div class="empty-state"><span>📭</span><p>No history yet. Start analyzing news!</p></div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
