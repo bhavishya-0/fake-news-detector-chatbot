@@ -42,9 +42,16 @@ async function handleLogin() {
   try {
     const res  = await fetch(`${API}/api/auth/login`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ email, password }) });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error; return; }
+    if (!res.ok) {
+      if (res.status === 503) {
+        errEl.textContent = 'Login service is unavailable right now. Use "Continue as Guest".';
+      } else {
+        errEl.textContent = data.error || 'Login failed. Please try again.';
+      }
+      return;
+    }
     saveSession(data.token, data.user); enterApp();
-  } catch { errEl.textContent = 'Server not running. Check your terminal.'; }
+  } catch { errEl.textContent = 'Network issue. Please try again.'; }
   finally { setLoading('loginForm', false); }
 }
 
@@ -58,9 +65,16 @@ async function handleRegister() {
   try {
     const res  = await fetch(`${API}/api/auth/register`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username, email, password }) });
     const data = await res.json();
-    if (!res.ok) { errEl.textContent = data.error; return; }
+    if (!res.ok) {
+      if (res.status === 503) {
+        errEl.textContent = 'Register service is unavailable right now. Use "Continue as Guest".';
+      } else {
+        errEl.textContent = data.error || 'Registration failed. Please try again.';
+      }
+      return;
+    }
     saveSession(data.token, data.user); enterApp();
-  } catch { errEl.textContent = 'Server not running. Check your terminal.'; }
+  } catch { errEl.textContent = 'Network issue. Please try again.'; }
   finally { setLoading('registerForm', false); }
 }
 

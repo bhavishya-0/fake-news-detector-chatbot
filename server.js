@@ -44,7 +44,7 @@ connectDb().catch(() => {});
 
 async function ensureDatabaseReady(res) {
   if (!process.env.MONGODB_URI) {
-    res.status(503).json({ error: 'Database is not configured on server.' });
+    res.status(503).json({ error: 'Login/Register is temporarily unavailable. Please use Guest mode.' });
     return false;
   }
 
@@ -54,7 +54,7 @@ async function ensureDatabaseReady(res) {
     await connectDb();
     return mongoose.connection.readyState === 1;
   } catch (err) {
-    res.status(503).json({ error: 'Database unavailable. Please try again shortly.' });
+    res.status(503).json({ error: 'Login/Register is temporarily unavailable. Please use Guest mode.' });
     return false;
   }
 }
@@ -82,7 +82,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
     const token = jwt.sign({ userId: user._id, username: user.username }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
     res.status(201).json({ message: 'Account created!', token, user: { id: user._id, username: user.username, email: user.email } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Registration failed. Please try again.' });
   }
 });
 
@@ -100,7 +100,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const token = jwt.sign({ userId: user._id, username: user.username }, process.env.JWT_SECRET || 'secret', { expiresIn: '7d' });
     res.json({ message: 'Login successful!', token, user: { id: user._id, username: user.username, email: user.email } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Login failed. Please try again.' });
   }
 });
 
