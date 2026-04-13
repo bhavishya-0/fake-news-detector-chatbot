@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { GoogleGenAI } = require('@google/genai');
 const express   = require('express');
 const mongoose  = require('mongoose');
 const jwt       = require('jsonwebtoken');
@@ -9,6 +10,9 @@ const User      = require('./models/User');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY);
+const genAI = hasGeminiKey ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+let dbConnectPromise = null;
 
 app.use(cors());
 app.use(express.json());
@@ -16,9 +20,26 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const authLimiter = rateLimit({ windowMs: 15*60*1000, max: 20 });
 
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/fakenews_db')
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch(err => console.log('⚠️  MongoDB not connected - Guest mode only\n', err.message));
+function connectDb() {
+  if (mongoose.connection.readyState === 1) return Promise.resolve();
+  if (dbConnectPromise) return dbConnectPromise;
+
+  const mongoUri = process.env.MONGODB_URI || 'mongodb://localhost:27017/fakenews_db';
+  dbConnectPromise = mongoose.connect(mongoUri, { serverSelectionTimeoutMS: 10000 })
+    .then(() => {
+      console.log('✅ MongoDB connected');
+    })
+    .catch((err) => {
+      console.log('⚠️  MongoDB not connected - Guest mode only\n', err.message);
+    })
+    .finally(() => {
+      dbConnectPromise = null;
+    });
+
+  return dbConnectPromise;
+}
+
+connectDb();
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
@@ -117,7 +138,46 @@ For confidence: fake news should be 50-95%, real news 50-90%, uncertain 0-40%.`;
   }
 }
 
+// ── Gemini AI Detection ──────────────────────────
+async function detectWithGemini(text) {
+  if (!genAI) return null;
+  try {
+    const prompt = `You are a fake news detection expert. Analyze this news headline or statement and determine if it is real, fake, or uncertain.
+
+News text: "${text}"
+
+Respond in this EXACT JSON format only, no extra text:
+{
+  "result": "fake" or "real" or "uncertain",
+  "verdict": "Likely Fake News" or "Likely Real News" or "Uncertain",
+  "emoji": "🚨" or "✅" or "❓",
+  "confidence": a number between 0 and 95,
+  "explanation": "a short 1-2 sentence explanation why",
+  "flags": [
+    { "type": "fake" or "real", "label": "reason label" }
+  ]
+}`;
+
+    const model  = 'gemini-2.0-flash';
+    const result = await genAI.models.generateContent({
+      model,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    });
+
+    const raw  = result.response.text();
+    const json = raw.replace(/```json|```/g, '').trim();
+    return JSON.parse(json);
+
+  } catch (err) {
+    console.log('⚠️  Gemini failed, using keyword detection:', err.message);
+    return null; // fallback to keyword detection
+  }
+}
+
+
 // ── Fake News Detection Engine ──
+
+
 function detectFakeNews(text) {
   const lower = text.toLowerCase();
   let score = 0;
@@ -172,20 +232,16 @@ app.post('/api/detect', async (req, res) => {
     const { text, saveToHistory } = req.body;
     if (!text || text.trim().length === 0) return res.status(400).json({ error: 'Please provide text' });
     if (text.length > 2000) return res.status(400).json({ error: 'Text too long (max 2000 chars)' });
-    
-    let result;
-    const useAI = process.env.USE_AI_DETECTION === 'true';
-    
-    // Try AI detection first (Ollama + Llama 2)
-    if (useAI) {
-      result = await detectFakeNewsWithOllama(text);
+
+    // Try Gemini AI first — fallback to keyword detection
+    let result = null;
+    if (process.env.GEMINI_API_KEY) {
+      result = await detectWithGemini(text);
     }
-    
-    // Fall back to keyword detection if AI is disabled or fails
     if (!result) {
-      result = detectFakeNews(text);
+      result = detectFakeNews(text); // keyword fallback
     }
-    
+
     if (saveToHistory) {
       const token = req.headers['authorization']?.split(' ')[1];
       if (token) {
@@ -215,15 +271,25 @@ app.delete('/api/history', authenticateToken, async (req, res) => {
   } catch(err) { res.status(500).json({ error: 'Cannot clear history' }); }
 });
 
-app.get('/api/health', (req, res) => res.json({ status:'OK', mongodb: mongoose.connection.readyState === 1 ? 'Connected':'Disconnected' }));
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
+    geminiConfigured: hasGeminiKey
+  });
+});
 
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
-app.listen(PORT, () => {
-  const mode = process.env.USE_AI_DETECTION === 'true' ? 'AI-Powered (Ollama)' : 'Keyword-Based';
+if (require.main === module) {
+  app.listen(PORT, () => {
+    const mode = hasGeminiKey ? 'AI-Powered (Gemini + fallback)' : 'Keyword-Based';
   console.log(`\n╔══════════════════════════════════════════╗`);
   console.log(`║   🔍 Fake News Detector — Running!       ║`);
   console.log(`║   Mode: ${mode.padEnd(30)}║`);
   console.log(`║   http://localhost:${PORT}                  ║`);
   console.log(`╚══════════════════════════════════════════╝\n`);
-});
+  });
+}
+
+module.exports = app;
