@@ -31,6 +31,7 @@ function connectDb() {
     })
     .catch((err) => {
       console.log('⚠️  MongoDB not connected - Guest mode only\n', err.message);
+      throw err;
     })
     .finally(() => {
       dbConnectPromise = null;
@@ -39,7 +40,24 @@ function connectDb() {
   return dbConnectPromise;
 }
 
-connectDb();
+connectDb().catch(() => {});
+
+async function ensureDatabaseReady(res) {
+  if (!process.env.MONGODB_URI) {
+    res.status(503).json({ error: 'Database is not configured on server.' });
+    return false;
+  }
+
+  if (mongoose.connection.readyState === 1) return true;
+
+  try {
+    await connectDb();
+    return mongoose.connection.readyState === 1;
+  } catch (err) {
+    res.status(503).json({ error: 'Database unavailable. Please try again shortly.' });
+    return false;
+  }
+}
 
 const authenticateToken = (req, res, next) => {
   const token = req.headers['authorization']?.split(' ')[1];
@@ -53,6 +71,7 @@ const authenticateToken = (req, res, next) => {
 // ── Register ──
 app.post('/api/auth/register', authLimiter, async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const { username, email, password } = req.body;
     if (!username || !email || !password)
       return res.status(400).json({ error: 'All fields required' });
@@ -70,6 +89,7 @@ app.post('/api/auth/register', authLimiter, async (req, res) => {
 // ── Login ──
 app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'All fields required' });
     const user = await User.findOne({ email: email.toLowerCase() });
@@ -246,6 +266,7 @@ app.post('/api/detect', async (req, res) => {
       const token = req.headers['authorization']?.split(' ')[1];
       if (token) {
         try {
+          if (!(await ensureDatabaseReady(res))) return;
           const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret');
           await User.findByIdAndUpdate(decoded.userId, { $push: { chatHistory: { role:'user', message: text, result: result.result, confidence: result.confidence } } });
         } catch(e) {}
@@ -259,6 +280,7 @@ app.post('/api/detect', async (req, res) => {
 
 app.get('/api/history', authenticateToken, async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     const user = await User.findById(req.user.userId).select('chatHistory');
     res.json({ history: user.chatHistory.slice(-50).reverse() });
   } catch(err) { res.status(500).json({ error: 'Cannot fetch history' }); }
@@ -266,6 +288,7 @@ app.get('/api/history', authenticateToken, async (req, res) => {
 
 app.delete('/api/history', authenticateToken, async (req, res) => {
   try {
+    if (!(await ensureDatabaseReady(res))) return;
     await User.findByIdAndUpdate(req.user.userId, { $set: { chatHistory: [] } });
     res.json({ message: 'History cleared' });
   } catch(err) { res.status(500).json({ error: 'Cannot clear history' }); }
@@ -275,7 +298,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'OK',
     mongodb: mongoose.connection.readyState === 1 ? 'Connected' : 'Disconnected',
-    geminiConfigured: hasGeminiKey
+    geminiConfigured: hasGeminiKey,
+    mongoConfigured: Boolean(process.env.MONGODB_URI)
   });
 });
 
